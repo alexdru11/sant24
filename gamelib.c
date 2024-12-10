@@ -306,12 +306,44 @@ static void genera_random() {
         if (pFirst == NULL) {
             pFirst = nuova_stanza;
         } else {
-            Stanza *current = pFirst;
-            while (current->stanza_destra != NULL) {
-                current = current->stanza_destra;
-            }
             
-            // Collega la nuova stanza in modo casuale
+            Stanza *current = pFirst;
+            Stanza *previus=NULL;
+            //while (current->stanza_destra != NULL) {
+              //  current = current->stanza_destra;
+            //}
+
+            //Avanza a caso nella mappa
+            int passi = rand() % (i + 1);
+            for(int j = 0; j < passi; j++){
+                previous = current;
+                int direzione = rand() % 4;
+                switch (direzione)
+                {
+                case 0:if(current->stanza_sopra != NULL){
+                        current = current->stanza_sopra;
+                    }
+                    break;
+                case 1:
+                    if(current->stanza_sotto != NULL){
+                        current = current->stanza_sotto;
+                    }
+                    break;
+                case 2:
+                    if(current->stanza_sinistra != NULL){
+                        current = current->stanza_sinistra;
+                    }
+                    break;
+                
+                default:
+                    if(current->stanza_destra != NULL){
+                        current = current->stanza_destra;
+                    }
+                    break;
+                    }
+                
+            }
+             // Collega la nuova stanza in modo casuale
             int direzione = rand() % 4;
             switch(direzione){
                 case 0:
@@ -321,7 +353,7 @@ static void genera_random() {
                         current->stanza_destra = nuova_stanza;
                     }
                 break;
-                case 1:
+              case 1:
                     if(current->stanza_sotto == NULL){
                         current->stanza_sotto = nuova_stanza;
                     } else {
@@ -336,12 +368,13 @@ static void genera_random() {
                     }
                 break;
                 case 3:
-                    if(current->stanza_destra == NULL){
+                  if(current->stanza_destra == NULL){
                         current->stanza_destra = nuova_stanza;
                     } else {
                         current->stanza_sinistra = nuova_stanza;
                     }
                 break;
+          
             }
         }
     }
