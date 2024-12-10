@@ -352,12 +352,15 @@ static void chiudi_mappa() {
     mappa_creata = 1;
 }
 
+
+
 // Funzione per iniziare il gioco
 void gioca() {
-    if (!mappa_creata) {
-        printf("Errore: la mappa non è ancora stata creata.\n");
+    if (!mappa_creata || pFirst == NULL) { 
+        printf("Errore: la mappa non è ancora stata creata o è vuota.\n");
         return;
     }
+
 
     // Resetta i punti vita dei giocatori
     for(int i = 0; i < num_giocatori; i++){
