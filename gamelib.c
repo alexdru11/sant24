@@ -1,12 +1,11 @@
 #include "gamelib.h"
 
 // Variabili globali
-static Stanza *pFirst = NULL; // Puntatore alla prima stanza della mappa
+static Stanza *primaStanza = NULL; // Puntatore alla prima stanza della mappa
 static Giocatore *giocatori[MAX_PLAYERS]; // Array di puntatori ai giocatori
-static int mappa_creata = 0; // Flag per indicare se la mappa è stata creata
+static int mappa_creata = 0; // Flag per indicare se la mappa è stata creata (0: no, 1: sì)
 static char nomi_vincitori[3][MAX_NAME_LENGTH] = {"", "", ""}; // Nomi degli ultimi tre vincitori
-static int turno_giocatore = 0; // Indice del giocatore corrente
-static int num_giocatori = 0;
+static int num_giocatori;
 
 // Prototipi funzioni static
 static void ins_stanza();
@@ -21,7 +20,6 @@ static void stampa_giocatore(Giocatore *giocatore);
 static void stampa_zona(Giocatore *giocatore);
 static void prendi_tesoro(Giocatore *giocatore);
 static void cerca_porta_segreta(Giocatore *giocatore);
-static void passa();
 static void applica_effetto_trabocchetto(Giocatore *giocatore);
 static void applica_effetto_tesoro(Giocatore *giocatore, Tipo_tesoro tesoro);
 static void libera_mappa();
@@ -29,7 +27,11 @@ static int lancia_dado();
 static void inizializza_giocatori();
 static void sposta_giocatore(Giocatore * giocatore, Stanza * nuova_stanza);
 static void stampa_menu_imposta_gioco();
-static void scegli_direzione(Stanza ** direzione);
+static int scegli_direzione(Stanza *stanza);
+static Stanza *crea_stanza_random();
+static void collega_stanza(Stanza *stanza_precedente, Stanza *nuova_stanza);
+static int conta_stanze();
+static void mescola_array(int arr[], int n);
 
 // Funzione per impostare il gioco
 void imposta_gioco() {
@@ -43,7 +45,13 @@ void imposta_gioco() {
     int scelta;
     do {
         stampa_menu_imposta_gioco();
-        scanf("%d", &scelta);
+        
+        // Controllo dell'input per la scelta
+        if (scanf("%d", &scelta) != 1) {
+            printf("Errore: inserisci un numero valido.\n");
+            while (getchar() != '\n'); // Pulisce il buffer di input
+            continue;
+        }
 
         switch (scelta) {
             case 1:
@@ -59,24 +67,8 @@ void imposta_gioco() {
                 genera_random();
                 break;
             case 5:
-                if(pFirst != NULL){
-                    int count = 0;
-                    Stanza * current = pFirst;
-                    while(current != NULL){
-                        count++;
-                        if(current->stanza_destra != NULL){
-                            current = current->stanza_destra;
-                        } else if (current->stanza_sotto != NULL){
-                            current = current->stanza_sotto;
-                        } else if (current->stanza_sopra != NULL){
-                            current = current->stanza_sopra;
-                        } else if (current->stanza_sinistra != NULL){
-                            current = current->stanza_sinistra;
-                        } else {
-                            break;
-                        }
-                    }
-                    if(count < MAX_ROOMS){
+                if(primaStanza != NULL){
+                    if(conta_stanze() < MAX_ROOMS){
                         printf("La mappa deve avere almeno 15 stanze!\n");
                     } else {
                          chiudi_mappa();
@@ -102,21 +94,46 @@ static void ins_stanza() {
         return;
     }
 
+    // Inizializzazione valori per la nuova stanza
+    nuova_stanza->trabocchetto_attivato = 0;
+    for(int i = 0; i < 4; i++){
+        nuova_stanza->tentativi_porta[i] = 0;
+    }
+
     // Inserimento valori della stanza da tastiera
+    int temp;
     printf("Inserisci il tipo della stanza:\n");
-    printf("0 - corridoio\n1 - scala\n2 - sala_banchetto\n3 - magazzino\n");
-    printf("4 - posto_guardia\n5 - prigione\n6 - armeria\n7 - moschea\n");
-    printf("8 - torre\n9 - bagni\n");
-    scanf("%u", (unsigned int*)&nuova_stanza->tipo);
+    printf("0 - CORRIDOIO\n1 - SCALA\n2 - SALA_BANCHETTO\n3 - MAGAZZINO\n");
+    printf("4 - POSTO_GUARDIA\n5 - PRIGIONE\n6 - ARMERIA\n7 - MOSCHEA\n");
+    printf("8 - TORRE\n9 - BAGNI\n");
+    if(scanf("%d", &temp) != 1 || temp < 0 || temp > 9){
+        printf("Errore: inserisci un numero valido (0-9).\n");
+        free(nuova_stanza);
+        while (getchar() != '\n');
+        return;
+    }
+    nuova_stanza->tipo = (Tipo_stanza)temp;
 
     printf("Inserisci il tipo di trabocchetto:\n");
-    printf("0 - nessuno\n1 - tegola\n2 - lame\n3 - caduta\n4 - burrone\n");
-    scanf("%u", (unsigned int*)&nuova_stanza->trabocchetto);
+    printf("0 - NESSUNO\n1 - TEGOLA\n2 - LAME\n3 - CADUTA\n4 - BURRONE\n");
+    if(scanf("%d", &temp) != 1 || temp < 0 || temp > 4){
+        printf("Errore: inserisci un numero valido (0-4).\n");
+        free(nuova_stanza);
+        while (getchar() != '\n');
+        return;
+    }
+    nuova_stanza->trabocchetto = (Tipo_trabocchetto)temp;
 
     printf("Inserisci il tipo di tesoro:\n");
-    printf("0 - nessun_tesoro\n1 - verde_veleno\n2 - blu_guarigione\n");
-    printf("3 - rosso_aumenta_vita\n4 - spada_tagliente\n5 - scudo\n");
-    scanf("%u", (unsigned int*)&nuova_stanza->tesoro);
+    printf("0 - NESSUN_TESORO\n1 - VERDE_VELENO\n2 - BLU_GUARIGIONE\n");
+    printf("3 - ROSSO_AUMENTA_VITA\n4 - SPADA_TAGLIENTE\n5 - SCUDO\n");
+    if(scanf("%d", &temp) != 1 || temp < 0 || temp > 5){
+        printf("Errore: inserisci un numero valido (0-5).\n");
+        free(nuova_stanza);
+        while (getchar() != '\n');
+        return;
+    }
+    nuova_stanza->tesoro = (Tipo_tesoro)temp;
 
     nuova_stanza->stanza_destra = NULL;
     nuova_stanza->stanza_sinistra = NULL;
@@ -124,20 +141,19 @@ static void ins_stanza() {
     nuova_stanza->stanza_sotto = NULL;
 
     // Inserimento in coda
-    if (pFirst == NULL) {
-        pFirst = nuova_stanza;
+    if (primaStanza == NULL) {
+        primaStanza = nuova_stanza;
     } else {
-        Stanza *current = pFirst;
+        Stanza *current = primaStanza;
         while (current->stanza_destra != NULL) {
             current = current->stanza_destra;
         }
-        printf("Scegli dove inserire la stanza:\n");
-        printf("1 - sopra\n2 - sotto\n3 - sinistra\n4 - destra\n");
-        int direzione;
-        scanf("%d", &direzione);
+        
+        
+        int direzione = scegli_direzione(current);
 
         switch(direzione){
-            case 1:
+            case 0:
                 if(current->stanza_sopra == NULL){
                     current->stanza_sopra = nuova_stanza;
                 } else {
@@ -145,7 +161,7 @@ static void ins_stanza() {
                     free(nuova_stanza);
                 }
             break;
-            case 2:
+            case 1:
                 if(current->stanza_sotto == NULL){
                     current->stanza_sotto = nuova_stanza;
                 } else {
@@ -153,7 +169,7 @@ static void ins_stanza() {
                     free(nuova_stanza);
                 }
             break;
-            case 3:
+            case 2:
                 if(current->stanza_sinistra == NULL){
                     current->stanza_sinistra = nuova_stanza;
                 } else {
@@ -161,7 +177,7 @@ static void ins_stanza() {
                     free(nuova_stanza);
                 }
             break;
-            case 4:
+            case 3:
                 if(current->stanza_destra == NULL){
                     current->stanza_destra = nuova_stanza;
                 } else {
@@ -169,28 +185,24 @@ static void ins_stanza() {
                     free(nuova_stanza);
                 }
             break;
-            default:
-            printf("Direzione non valida, la stanza non verra' aggiunta\n");
-            free(nuova_stanza);
-            break;
         }
     }
 }
 
 // Funzione per cancellare l'ultima stanza inserita
 static void canc_stanza() {
-    if (pFirst == NULL) {
+    if (primaStanza == NULL) {
         printf("Nessuna stanza da cancellare.\n");
         return;
     }
 
-    if (pFirst->stanza_destra == NULL && pFirst->stanza_sotto == NULL && pFirst->stanza_sopra == NULL && pFirst->stanza_sinistra == NULL) {
-        free(pFirst);
-        pFirst = NULL;
+    if (primaStanza->stanza_destra == NULL && primaStanza->stanza_sotto == NULL && primaStanza->stanza_sopra == NULL && primaStanza->stanza_sinistra == NULL) {
+        free(primaStanza);
+        primaStanza = NULL;
         return;
     }
 
-    Stanza *current = pFirst;
+    Stanza *current = primaStanza;
     Stanza *prev = NULL;
     while (current->stanza_destra != NULL || current->stanza_sotto != NULL || current->stanza_sopra != NULL || current->stanza_sinistra != NULL) {
         prev = current;
@@ -211,7 +223,7 @@ static void canc_stanza() {
         prev->stanza_sotto = NULL;
     } else if (prev->stanza_sopra == current){
         prev->stanza_sopra = NULL;
-    } else {
+    } else if (prev->stanza_sinistra == current){
         prev->stanza_sinistra = NULL;
     }
 
@@ -220,22 +232,22 @@ static void canc_stanza() {
 
 // Funzione per stampare le stanze
 static void stampa_stanze() {
-    if (pFirst == NULL) {
+    if (primaStanza == NULL) {
         printf("Nessuna stanza creata.\n");
         return;
     }
 
-    Stanza *current = pFirst;
+    Stanza *current = primaStanza;
     int i = 0;
     while (current != NULL) {
         printf("Stanza %d:\n", i + 1);
-        printf("Tipo: %u\n", current->tipo);
-        printf("Trabocchetto: %u\n", current->trabocchetto);
-        printf("Tesoro: %u\n", current->tesoro);
-        printf("Stanza destra: %p\n", (void *)current->stanza_destra);
-        printf("Stanza sinistra: %p\n", (void *)current->stanza_sinistra);
-        printf("Stanza sopra: %p\n", (void *)current->stanza_sopra);
-        printf("Stanza sotto: %p\n", (void *)current->stanza_sotto);
+        printf("Tipo: %d\n", current->tipo);
+        printf("Trabocchetto: %d\n", current->trabocchetto);
+        printf("Tesoro: %d\n", current->tesoro);
+        printf("Stanza destra: %s\n", current->stanza_destra != NULL ? "Collegata" : "Non collegata");
+        printf("Stanza sinistra: %s\n", current->stanza_sinistra != NULL ? "Collegata" : "Non collegata");
+        printf("Stanza sopra: %s\n", current->stanza_sopra != NULL ? "Collegata" : "Non collegata");
+        printf("Stanza sotto: %s\n", current->stanza_sotto != NULL ? "Collegata" : "Non collegata");
         printf("\n");
         
         if(current->stanza_destra != NULL){
@@ -260,99 +272,44 @@ static void genera_random() {
 
     // Crea 15 stanze casuali
     for (int i = 0; i < MAX_ROOMS; i++) {
-        Stanza *nuova_stanza = (Stanza *)malloc(sizeof(Stanza));
-        if (nuova_stanza == NULL) {
-            printf("Errore: impossibile allocare memoria per la nuova stanza.\n");
-            return;
-        }
-
-        // Generazione casuale dei valori della stanza
-        nuova_stanza->tipo = rand() % 10;
-
-        int random_trabocchetto = rand() % 100;
-        if(random_trabocchetto <= 65){
-            nuova_stanza->trabocchetto = nessuno;
-        } else if (random_trabocchetto > 65 && random_trabocchetto <= 75){
-            nuova_stanza->trabocchetto = tegola;
-        } else if (random_trabocchetto > 75 && random_trabocchetto <= 84){
-            nuova_stanza->trabocchetto = lame;
-        } else if (random_trabocchetto > 84 && random_trabocchetto <= 92){
-            nuova_stanza->trabocchetto = caduta;
-        } else {
-            nuova_stanza->trabocchetto = burrone;
-        }
-
-        int random_tesoro = rand() % 100;
-        if(random_tesoro <= 20){
-            nuova_stanza->tesoro = nessun_tesoro;
-        } else if (random_tesoro > 20 && random_tesoro <= 40){
-            nuova_stanza->tesoro = verde_veleno;
-        } else if (random_tesoro > 40 && random_tesoro <= 60){
-            nuova_stanza->tesoro = blu_guarigione;
-        } else if (random_tesoro > 60 && random_tesoro <= 75){
-            nuova_stanza->tesoro = rosso_aumenta_vita;
-        } else if (random_tesoro > 75 && random_tesoro <= 90){
-            nuova_stanza->tesoro = spada_tagliente;
-        } else {
-            nuova_stanza->tesoro = scudo;
-        }
-
-        nuova_stanza->stanza_destra = NULL;
-        nuova_stanza->stanza_sinistra = NULL;
-        nuova_stanza->stanza_sopra = NULL;
-        nuova_stanza->stanza_sotto = NULL;
+        Stanza *nuova_stanza = crea_stanza_random();
 
         // Inserimento in coda
-        if (pFirst == NULL) {
-            pFirst = nuova_stanza;
+        if (primaStanza == NULL) {
+            primaStanza = nuova_stanza;
         } else {
-            Stanza *current = pFirst;
-            Stanza *previous = NULL;
+            Stanza *current = primaStanza;
 
-            // Trova l'ultima stanza
+            // Trova una stanza a cui collegare la nuova stanza
             while (current != NULL) {
-                previous = current;
-                current = current->stanza_destra;
-            }
-            
-             //Adesso current e' null, previous e' l'ultima stanza
-            //Si prova ad attaccare la nuova stanza in una direzione a caso
-            int tentativi = 0;
-            int direzione_libera = 0; // Flag per indicare se almeno una direzione è libera
-            while(tentativi < 100){
                 
-                int direzione = rand() % 4;
-                if(direzione == 0 && previous->stanza_sopra == NULL){
-                    previous->stanza_sopra = nuova_stanza;
-                    direzione_libera = 1;
-                    break;
-                } else if (direzione == 1 && previous->stanza_sotto == NULL){
-                    previous->stanza_sotto = nuova_stanza;
-                    direzione_libera = 1;
-                    break;
-                } else if (direzione == 2 && previous->stanza_sinistra == NULL){
-                    previous->stanza_sinistra = nuova_stanza;
-                    direzione_libera = 1;
-                    break;
-                } else if (direzione == 3 && previous->stanza_destra == NULL){
-                    previous->stanza_destra = nuova_stanza;
-                    direzione_libera = 1;
-                    break;
+                // Prova a collegare la stanza in una direzione casuale
+                if(current->stanza_sopra == NULL || current->stanza_sotto == NULL || current->stanza_sinistra == NULL || current->stanza_destra == NULL){
+                    collega_stanza(current, nuova_stanza);
                 }
-                tentativi++;
-            }
 
                 //Se una direzione è libera, collega la nuova stanza e passa alla prossima iterazione
-                if(previous->stanza_sopra == nuova_stanza || previous->stanza_sotto == nuova_stanza || previous->stanza_sinistra == nuova_stanza || previous->stanza_destra == nuova_stanza){
+                if(current->stanza_sopra == nuova_stanza || current->stanza_sotto == nuova_stanza || current->stanza_sinistra == nuova_stanza || current->stanza_destra == nuova_stanza){
                     break;
+                } else {
+                    // Altrimenti, passa alla prossima stanza
+                    if(current->stanza_destra != NULL){
+                        current = current->stanza_destra;
+                    } else if (current->stanza_sotto != NULL){
+                        current = current->stanza_sotto;
+                    } else if (current->stanza_sopra != NULL){
+                        current = current->stanza_sopra;
+                    } else {
+                        current = current->stanza_sinistra;
+                    }
                 }
             }
             
              //Se non si riesce a collegare la stanza in nessun modo la si elimina
-            if(direzione_libera == 0){
+            if(current == NULL){
                 free(nuova_stanza);
                 printf("Impossibile collegare la stanza, verra eliminata.\n");
-                break;
+                return;
             }
         }
     }
@@ -363,36 +320,44 @@ static void chiudi_mappa() {
     mappa_creata = 1;
 }
 
-
-
 // Funzione per iniziare il gioco
 void gioca() {
-    if (!mappa_creata || pFirst == NULL) { 
+    if (!mappa_creata || primaStanza == NULL) { 
         printf("Errore: la mappa non è ancora stata creata o è vuota.\n");
         return;
     }
 
-
-    // Resetta i punti vita dei giocatori
+    // Resetta i punti vita e la posizione dei giocatori
     for(int i = 0; i < num_giocatori; i++){
         giocatori[i]->p_vita = giocatori[i]->p_vita_max;
+        giocatori[i]->posizione = primaStanza;
+        giocatori[i]->fuggito = 0;
     }
 
-    // Posiziona i giocatori nella prima stanza
+    //Inizializza array di indici
+    int ordine_giocatori[MAX_PLAYERS];
     for (int i = 0; i < num_giocatori; i++) {
-        giocatori[i]->posizione = pFirst;
+        ordine_giocatori[i] = i;
     }
 
     // Ciclo di gioco
     int gioco_finito = 0;
+    int turno_giocatore = 0;
     while (!gioco_finito) {
-        Giocatore *giocatore_corrente = giocatori[turno_giocatore];
+        // Mescola l'ordine dei giocatori all'inizio di ogni round
+        if (turno_giocatore == 0) {
+            mescola_array(ordine_giocatori, num_giocatori);
+        }
+
+        Giocatore *giocatore_corrente = giocatori[ordine_giocatori[turno_giocatore]];
         
         printf("Turno di %s\n", giocatore_corrente->nome_giocatore);
 
         int scelta;
         int ha_avanzato = 0;
+        int azione_eseguita = 0;
         do {
+            azione_eseguita = 0;
             printf("Scegli un'azione:\n");
             printf("1 - Avanza\n");
             printf("2 - Combatti\n");
@@ -401,14 +366,18 @@ void gioca() {
             printf("5 - Stampa zona\n");
             printf("6 - Prendi tesoro\n");
             printf("7 - Cerca porta segreta\n");
-            printf("8 - Passa\n");
-            scanf("%d", &scelta);
+            if (scanf("%d", &scelta) != 1) {
+                printf("Errore: inserisci un numero valido.\n");
+                while (getchar() != '\n'); // Pulisce il buffer di input
+                continue;
+            }
 
             switch (scelta) {
                 case 1:
                     if(!ha_avanzato){
                         avanza(giocatore_corrente);
                         ha_avanzato = 1;
+                        azione_eseguita = 1;
                     } else {
                         printf("Hai gia' avanzato in questo turno!\n");
                     }
@@ -417,9 +386,11 @@ void gioca() {
                    if(combatti(giocatore_corrente)){
                         gioco_finito = 1;
                    }
+                   azione_eseguita = 1;
                     break;
                 case 3:
                     scappa(giocatore_corrente);
+                    azione_eseguita = 1;
                     break;
                 case 4:
                     stampa_giocatore(giocatore_corrente);
@@ -429,47 +400,37 @@ void gioca() {
                     break;
                 case 6:
                     prendi_tesoro(giocatore_corrente);
+                    azione_eseguita = 1;
                     break;
                 case 7:
                     if(!ha_avanzato){
                         cerca_porta_segreta(giocatore_corrente);
                         ha_avanzato = 1; // Considera la ricerca come un avanzamento
+                        azione_eseguita = 1;
                     } else {
                         printf("Hai gia' avanzato in questo turno!\n");
                     }
                     
                     break;
-                case 8:
-                    passa();
-                    break;
                 default:
                     printf("Comando non valido.\n");
             }
-        } while (scelta != 8 && !gioco_finito);
-        if(giocatore_corrente->p_vita <= 0){
-            printf("%s e' morto!\n", giocatore_corrente->nome_giocatore);
-            gioco_finito = 1;
-            for(int i = 0; i < num_giocatori; i++){
-                if(giocatori[i]->p_vita > 0){
-                    gioco_finito = 0;
-                }
+            if(giocatore_corrente->p_vita <= 0 && azione_eseguita){
+                printf("%s e' morto!\n", giocatore_corrente->nome_giocatore);
             }
-        }
+        } while (!gioco_finito && !azione_eseguita);
+
         // Passa al prossimo giocatore
         if(!gioco_finito){
-            int giocatori_rimasti[MAX_PLAYERS];
-            int count = 0;
+            turno_giocatore = (turno_giocatore + 1) % num_giocatori;
+            int giocatori_vivi = 0;
             for(int i = 0; i < num_giocatori; i++){
                 if(giocatori[i]->p_vita > 0){
-                    giocatori_rimasti[count] = i;
-                    count++;
+                    giocatori_vivi++;
                 }
             }
-
-            if(count > 0){
-                turno_giocatore = giocatori_rimasti[rand() % count];
-            } else {
-                gioco_finito = 1; // Tutti i giocatori sono morti
+            if(giocatori_vivi == 0){
+                gioco_finito = 1;
             }
         }
     }
@@ -500,45 +461,29 @@ static void avanza(Giocatore *giocatore) {
     Stanza * stanza_corrente = giocatore->posizione;
     Stanza * prossima_stanza = NULL;
     
-    printf("Puoi avanzare in queste direzioni: \n");
-    if(stanza_corrente->stanza_sopra != NULL){
-        printf("Sopra\n");
+    int direzione = scegli_direzione(stanza_corrente);
+    switch (direzione){
+        case 0:
+            prossima_stanza = stanza_corrente->stanza_sopra;
+            break;
+        case 1:
+            prossima_stanza = stanza_corrente->stanza_sotto;
+            break;
+        case 2:
+            prossima_stanza = stanza_corrente->stanza_sinistra;
+            break;
+        case 3:
+            prossima_stanza = stanza_corrente->stanza_destra;
+            break;
     }
-    if(stanza_corrente->stanza_sotto != NULL){
-        printf("Sotto\n");
-    }
-    if(stanza_corrente->stanza_sinistra != NULL){
-        printf("Sinistra\n");
-    }
-    if(stanza_corrente->stanza_destra != NULL){
-        printf("Destra\n");
-    }
-
-    
-    int direzione;
-    do{
-        printf("Scegli una direzione (1-Sopra, 2-Sotto, 3-Sinistra, 4-Destra): ");
-        scanf("%d", &direzione);
-        switch (direzione){
-            case 1:
-                prossima_stanza = stanza_corrente->stanza_sopra;
-                break;
-            case 2:
-                prossima_stanza = stanza_corrente->stanza_sotto;
-                break;
-            case 3:
-                prossima_stanza = stanza_corrente->stanza_sinistra;
-                break;
-            case 4:
-                prossima_stanza = stanza_corrente->stanza_destra;
-                break;
-            default:
-                printf("Direzione non valida.\n");
-        }
-    } while (prossima_stanza == NULL);
 
     
     sposta_giocatore(giocatore, prossima_stanza);
+
+    // Applica l'effetto del tesoro
+    if(prossima_stanza->tesoro != NESSUN_TESORO){
+        prendi_tesoro(giocatore);
+    }
     
     // Applica l'effetto del trabocchetto
     applica_effetto_trabocchetto(giocatore);
@@ -595,6 +540,8 @@ static int combatti(Giocatore *giocatore) {
         int attacco_giocatore = lancia_dado();
         int attacco_nemico = lancia_dado();
 
+        printf("Inizia il giocatore %s (attacco %d) contro nemico (attacco %d)\n", attacco_giocatore >= attacco_nemico ? giocatore->nome_giocatore : "nemico", attacco_giocatore, attacco_nemico);
+
         if (attacco_giocatore >= attacco_nemico) {
             // Attacca il giocatore
             int danni_inflitti = 0;
@@ -633,6 +580,9 @@ static int combatti(Giocatore *giocatore) {
                 printf("Hai sconfitto il nemico!\n");
                 if(giocatore->p_vita < giocatore->p_vita_max){
                     giocatore->p_vita++;
+                    printf("Hai guadagnato 1 punto vita!\n");
+                } else {
+                    printf("Avevi gia' il massimo dei punti vita.\n");
                 }
                 return tipo_nemico == 2;
             }
@@ -745,6 +695,9 @@ static int combatti(Giocatore *giocatore) {
                 printf("Hai sconfitto il nemico!\n");
                 if(giocatore->p_vita < giocatore->p_vita_max){
                     giocatore->p_vita++;
+                    printf("Hai guadagnato 1 punto vita!\n");
+                } else {
+                    printf("Avevi gia' il massimo dei punti vita.\n");
                 }
                 return tipo_nemico == 2; // Ritorna true se il nemico sconfitto è jafar
             }
@@ -755,10 +708,14 @@ static int combatti(Giocatore *giocatore) {
 
 // Funzione per la fuga
 static void scappa(Giocatore *giocatore) {
-    if(giocatore->classe == principe){
-        if(giocatore->posizione != pFirst){
+    if(giocatore->posizione == primaStanza){
+        printf("Non puoi scappare dalla prima stanza!\n");
+        return;
+    }
+    if(giocatore->classe == PRINCIPE){
+        if(giocatore->fuggito == 0){
             printf("%s e' tornato alla stanza precedente.\n", giocatore->nome_giocatore);
-            Stanza * current = pFirst;
+            Stanza * current = primaStanza;
             Stanza * prev = NULL;
             while(current != giocatore->posizione){
                 prev = current;
@@ -773,31 +730,29 @@ static void scappa(Giocatore *giocatore) {
                 }
             }
             sposta_giocatore(giocatore, prev);
-            giocatore->posizione = prev;
+            giocatore->fuggito++;
         } else {
-            printf("Non puoi scappare dalla prima stanza!\n");
+            printf("Un principe puo' scappare solo una volta!\n");
         }
-    } else {
-        if(giocatore->posizione != pFirst){
+    } else if (giocatore->classe == DOPPLEGANGER){
+        if(giocatore->fuggito < 2){
             printf("%s e' tornato alla stanza precedente.\n", giocatore->nome_giocatore);
-            Stanza * current = pFirst;
+            Stanza * current = primaStanza;
             Stanza * prev = NULL;
             while(current != giocatore->posizione){
                 prev = current;
                 if(current->stanza_destra != NULL && current->stanza_destra != giocatore->posizione){
                     current = current->stanza_destra;
-                } else if (current->stanza_sotto != NULL && current->stanza_sotto != giocatore->posizione){
-                    current = current->stanza_sotto;
-                } else if (current->stanza_sopra != NULL && current->stanza_sopra != giocatore->posizione){
+                              } else if (current->stanza_sopra != NULL && current->stanza_sopra != giocatore->posizione){
                     current = current->stanza_sopra;
                 } else {
                     current = current->stanza_sinistra;
                 }
             }
             sposta_giocatore(giocatore, prev);
-            giocatore->posizione = prev;
+            giocatore->fuggito++;
         } else {
-            printf("Non puoi scappare dalla prima stanza!\n");
+            printf("Un doppleganger puo' scappare solo due volte!\n");
         }
     }
 }
@@ -805,8 +760,8 @@ static void scappa(Giocatore *giocatore) {
 // Funzione per stampare le informazioni del giocatore
 static void stampa_giocatore(Giocatore *giocatore) {
     printf("Nome: %s\n", giocatore->nome_giocatore);
-    printf("Classe: %d\n", giocatore->classe);
-    printf("Posizione: %p\n", (void *)giocatore->posizione);
+    printf("Classe: %s\n", giocatore->classe == PRINCIPE ? "Principe" : "Doppleganger");
+    printf("Posizione: Stanza %d\n", conta_stanze());
     printf("Punti vita massimi: %d\n", giocatore->p_vita_max);
     printf("Punti vita attuali: %d\n", giocatore->p_vita);
     printf("Dadi attacco: %d\n", giocatore->dadi_attacco);
@@ -818,15 +773,15 @@ static void stampa_zona(Giocatore *giocatore) {
     Stanza *stanza = giocatore->posizione;
     printf("Tipo stanza: %d\n", stanza->tipo);
     printf("Trabocchetto: %d\n", stanza->trabocchetto);
-    printf("Tesoro presente: %s\n", stanza->tesoro != nessun_tesoro ? "Si" : "No");
+    printf("Tesoro presente: %s\n", stanza->tesoro != NESSUN_TESORO ? "Si" : "No");
 }
 
 // Funzione per prendere il tesoro
 static void prendi_tesoro(Giocatore *giocatore) {
     Stanza *stanza = giocatore->posizione;
-    if (stanza->tesoro != nessun_tesoro) {
+    if (stanza->tesoro != NESSUN_TESORO) {
         applica_effetto_tesoro(giocatore, stanza->tesoro);
-        stanza->tesoro = nessun_tesoro; // Rimuovi il tesoro dalla stanza
+        stanza->tesoro = NESSUN_TESORO; // Rimuovi il tesoro dalla stanza
     } else {
         printf("Non c'e' nessun tesoro qui.\n");
     }
@@ -848,35 +803,33 @@ static void cerca_porta_segreta(Giocatore *giocatore) {
         return;
     }
 
-    if (rand() % 3 == 0) { // 33% di probabilità di trovare una porta segreta
+    int direzione = scegli_direzione(stanza_corrente);
+    stanza_corrente->tentativi_porta[direzione]++;
+
+    // Calcola la probabilità di trovare una porta segreta in base al numero di tentativi
+    float probabilita;
+    switch (stanza_corrente->tentativi_porta[direzione]) {
+        case 1:
+            probabilita = 0.33;
+            break;
+        case 2:
+            probabilita = 0.20;
+            break;
+        case 3:
+            probabilita = 0.15;
+            break;
+        default:
+            probabilita = 0.0; // Nessuna probabilità dopo 3 tentativi
+    }
+
+    if ((rand() / (float)RAND_MAX) < probabilita) {
         printf("Hai trovato una porta segreta!\n");
 
         // Crea una nuova stanza
-        Stanza *nuova_stanza = (Stanza *)malloc(sizeof(Stanza));
-        if (nuova_stanza == NULL) {
-            printf("Errore: impossibile allocare memoria per la nuova stanza.\n");
-            return;
-        }
+        Stanza *nuova_stanza = crea_stanza_random();
 
-        // Generazione casuale dei valori della stanza
-        nuova_stanza->tipo = rand() % 10;
-        nuova_stanza->trabocchetto = nessuno;
-        nuova_stanza->tesoro = nessun_tesoro;
-        nuova_stanza->stanza_destra = NULL;
-        nuova_stanza->stanza_sinistra = NULL;
-        nuova_stanza->stanza_sopra = NULL;
-        nuova_stanza->stanza_sotto = NULL;
-
-        // Collega la nuova stanza in una direzione casuale
-        int direzione;
-        do {
-            direzione = rand() % 4; // 0: sopra, 1: sotto, 2: sinistra, 3: destra
-        } while ((direzione == 0 && stanza_corrente->stanza_sopra != NULL) ||
-                 (direzione == 1 && stanza_corrente->stanza_sotto != NULL) ||
-                 (direzione == 2 && stanza_corrente->stanza_sinistra != NULL) ||
-                 (direzione == 3 && stanza_corrente->stanza_destra != NULL));
-
-        switch (direzione) {
+        // Collega la nuova stanza alla stanza corrente
+        switch(direzione){
             case 0:
                 stanza_corrente->stanza_sopra = nuova_stanza;
                 break;
@@ -893,79 +846,82 @@ static void cerca_porta_segreta(Giocatore *giocatore) {
 
         // Sposta il giocatore nella nuova stanza
         sposta_giocatore(giocatore, nuova_stanza);
-        
+
         printf("Ora ti trovi nella stanza segreta.\n");
-        
+
+        // Sposta il giocatore nella stanza precedente
         sposta_giocatore(giocatore, stanza_corrente);
 
         printf("Sei tornato alla stanza precedente.\n");
+
     } else {
         printf("Non hai trovato nessuna porta segreta.\n");
     }
 }
 
-// Funzione per passare il turno
-static void passa() {
-    printf("Turno passato.\n");
-}
-
 // Funzione per applicare gli effetti dei trabocchetti
 static void applica_effetto_trabocchetto(Giocatore *giocatore) {
-    if(giocatore->classe == principe){
-        static int principe_immune = 1;
-        if(principe_immune){
-            principe_immune = 0;
-            printf("Il principe e' immune al primo trabocchetto!\n");
-            return;
-        }
-    }
-    
-    
     Stanza *stanza = giocatore->posizione;
-    switch (stanza->trabocchetto) {
-        case nessuno:
-            printf("Nessun trabocchetto qui.\n");
-            break;
-        case tegola:
-            printf("Sei stato colpito da una tegola!\n");
-            giocatore->p_vita--;
-            printf("Hai perso 1 punto vita.\n");
-            break;
-        case lame:
-            printf("Sei stato colpito dalle lame!\n");
-            giocatore->p_vita -= 2;
-            printf("Hai perso 2 punti vita.\n");
-            break;
-        case caduta:
-            printf("Sei caduto in una trappola!\n");
-            if (rand() % 2 == 0) {
+    if(stanza->trabocchetto_attivato == 0){
+        if(giocatore->classe == PRINCIPE){
+            static int principe_immune = 1;
+            if(principe_immune){
+                principe_immune = 0;
+                printf("Il principe e' immune al primo trabocchetto!\n");
+                stanza->trabocchetto_attivato = 1;
+                return;
+            }
+        }
+    
+    
+        switch (stanza->trabocchetto) {
+            case NESSUNO:
+                printf("Nessun trabocchetto qui.\n");
+                break;
+            case TEGOLA:
+                printf("Sei stato colpito da una tegola!\n");
                 giocatore->p_vita--;
                 printf("Hai perso 1 punto vita.\n");
-            } else {
+                break;
+            case LAME:
+                printf("Sei stato colpito dalle lame!\n");
                 giocatore->p_vita -= 2;
                 printf("Hai perso 2 punti vita.\n");
-            }
-            break;
-        case burrone:
-            printf("Sei caduto in un burrone!\n");
-            giocatore->p_vita = 0;
-            printf("Sei morto!\n");
-            break;
+                break;
+            case CADUTA:
+                printf("Sei caduto in una trappola!\n");
+                if (rand() % 2 == 0) {
+                    giocatore->p_vita--;
+                    printf("Hai perso 1 punto vita.\n");
+                } else {
+                    giocatore->p_vita -= 2;
+                    printf("Hai perso 2 punti vita.\n");
+                }
+                break;
+            case BURRONE:
+                printf("Sei caduto in un burrone!\n");
+                giocatore->p_vita = 0;
+                printf("Sei morto!\n");
+                break;
+        }
+        stanza->trabocchetto_attivato = 1;
+    } else {
+        printf("Il trabocchetto e' gia' stato attivato!\n");
     }
 }
 
 // Funzione per applicare gli effetti dei tesori
 static void applica_effetto_tesoro(Giocatore *giocatore, Tipo_tesoro tesoro) {
     switch (tesoro) {
-        case nessun_tesoro:
+        case NESSUN_TESORO:
             printf("Nessun tesoro qui.\n");
             break;
-        case verde_veleno:
+        case VERDE_VELENO:
             printf("Hai raccolto del veleno verde!\n");
             giocatore->p_vita--;
             printf("Hai perso 1 punto vita.\n");
             break;
-        case blu_guarigione:
+        case BLU_GUARIGIONE:
             printf("Hai raccolto una pozione curativa blu!\n");
             if (giocatore->p_vita < giocatore->p_vita_max) {
                 giocatore->p_vita++;
@@ -974,19 +930,19 @@ static void applica_effetto_tesoro(Giocatore *giocatore, Tipo_tesoro tesoro) {
                 printf("Hai gia' il massimo dei punti vita.\n");
             }
             break;
-        case rosso_aumenta_vita:
+        case ROSSO_AUMENTA_VITA:
             printf("Hai raccolto una pozione che aumenta la vita massima!\n");
             giocatore->p_vita_max++;
             giocatore->p_vita = giocatore->p_vita_max;
             printf("I tuoi punti vita massimi sono aumentati di 1.\n");
             printf("I tuoi punti vita sono stati ripristinati al massimo.\n");
             break;
-        case spada_tagliente:
+        case SPADA_TAGLIENTE:
             printf("Hai raccolto una spada tagliente!\n");
             giocatore->dadi_attacco++;
             printf("I tuoi dadi attacco sono aumentati di 1.\n");
             break;
-        case scudo:
+        case SCUDO:
             printf("Hai raccolto uno scudo!\n");
             giocatore->dadi_difesa++;
             printf("I tuoi dadi difesa sono aumentati di 1.\n");
@@ -996,9 +952,9 @@ static void applica_effetto_tesoro(Giocatore *giocatore, Tipo_tesoro tesoro) {
 
 // Funzione per liberare la memoria allocata per la mappa
 static void libera_mappa() {
-    if (pFirst == NULL) return;
+    if (primaStanza == NULL) return;
 
-    Stanza *current = pFirst;
+    Stanza *current = primaStanza;
     Stanza *next = NULL;
     
     while(current != NULL){
@@ -1021,7 +977,7 @@ static void libera_mappa() {
         free(current);
         current = next;
     }
-    pFirst = NULL;
+    primaStanza = NULL;
     mappa_creata = 0;
 }
 
@@ -1035,7 +991,11 @@ static void inizializza_giocatori(){
     // Chiedi il numero di giocatori
     do {
         printf("Inserisci il numero di giocatori (1-3): ");
-        scanf("%d", &num_giocatori);
+        if(scanf("%d", &num_giocatori) != 1){
+            printf("Errore: inserisci un numero valido.\n");
+            while (getchar() != '\n');
+            continue;
+        }
     } while (num_giocatori < 1 || num_giocatori > MAX_PLAYERS);
 
     // Inizializza i giocatori
@@ -1051,14 +1011,24 @@ static void inizializza_giocatori(){
         scanf(" %[^\n]", giocatori[i]->nome_giocatore);
 
         // Scegli la classe del giocatore
+        
         if (!principe_presente) {
-            printf("Scegli la classe del giocatore %d (0 - principe, 1 - doppleganger): ", i + 1);
-            scanf("%d", (int *)&giocatori[i]->classe);
-            if (giocatori[i]->classe == principe) {
+            printf("Scegli la classe del giocatore %d (0 - PRINCIPE, 1 - DOPPLEGANGER): ", i + 1);
+            int temp;
+            if(scanf("%d", &temp) != 1 || (temp != 0 && temp != 1)){
+                printf("Errore: inserisci un numero valido (0-1).\n");
+                while (getchar() != '\n');
+                free(giocatori[i]);
+                i--;
+                continue;
+            }
+            giocatori[i]->classe = (Tipo_giocatore)temp;
+            if (giocatori[i]->classe == PRINCIPE) {
                 principe_presente = 1;
             }
         } else {
-            giocatori[i]->classe = doppleganger;
+            printf("Il giocatore %d sara' un doppleganger.\n", i + 1);
+            giocatori[i]->classe = DOPPLEGANGER;
         }
 
         // Inizializza le statistiche del giocatore
@@ -1067,21 +1037,7 @@ static void inizializza_giocatori(){
         giocatori[i]->dadi_attacco = 2;
         giocatori[i]->dadi_difesa = 2;
         giocatori[i]->posizione = NULL;
-    }
-
-    //Se principe non e' presente, fallo inserire
-    if(!principe_presente){
-        printf("Deve essere presente almeno un principe per poter giocare.\n");
-        free(giocatori[num_giocatori - 1]);
-        giocatori[num_giocatori - 1] = (Giocatore *)malloc(sizeof(Giocatore));
-        printf("Inserisci il nome del giocatore %d: ", num_giocatori);
-        scanf(" %[^\n]", giocatori[num_giocatori - 1]->nome_giocatore);
-        giocatori[num_giocatori - 1]->classe = principe;
-        giocatori[num_giocatori - 1]->p_vita_max = 5;
-        giocatori[num_giocatori - 1]->p_vita = giocatori[num_giocatori - 1]->p_vita_max;
-        giocatori[num_giocatori - 1]->dadi_attacco = 2;
-        giocatori[num_giocatori - 1]->dadi_difesa = 2;
-        giocatori[num_giocatori - 1]->posizione = NULL;
+        giocatori[i]->fuggito = 0;
     }
 }
 
@@ -1101,6 +1057,16 @@ static void stampa_menu_imposta_gioco(){
 }
 // Funzione per terminare il gioco
 void termina_gioco() {
+    int giocatori_vivi = 0;
+    for(int i = 0; i < num_giocatori; i++){
+        if(giocatori[i]->p_vita > 0){
+            giocatori_vivi++;
+        }
+    }
+    if(giocatori_vivi != 0){
+        printf("Non puoi terminare il gioco se c'e' ancora qualche giocatore vivo!\n");
+        return;
+    }
     printf("Grazie per aver giocato!\n");
     libera_mappa();
     for(int i = 0; i < num_giocatori; i++){
@@ -1114,6 +1080,143 @@ void crediti() {
     printf("Prince of Inertia - Sviluppato da ChatGPT\n");
     printf("Vincitori delle ultime tre partite:\n");
     for (int i = 0; i < 3; i++) {
-        printf("%d: %s\n", i + 1, nomi_vincitori[i]);
+        if(strcmp(nomi_vincitori[i], "") == 0){
+            printf("%d: Nessun vincitore\n", i + 1);
+        } else {
+            printf("%d: %s\n", i + 1, nomi_vincitori[i]);
+        }
+    }
+}
+
+// Funzione per scegliere una direzione
+static int scegli_direzione(Stanza *stanza){
+    int scelta;
+    do{
+        printf("Scegli una direzione:\n");
+        if(stanza->stanza_sopra != NULL){
+            printf("0 - Sopra\n");
+        }
+        if(stanza->stanza_sotto != NULL){
+            printf("1 - Sotto\n");
+        }
+        if(stanza->stanza_sinistra != NULL){
+            printf("2 - Sinistra\n");
+        }
+        if(stanza->stanza_destra != NULL){
+            printf("3 - Destra\n");
+        }
+        if(scanf("%d", &scelta) != 1){
+            printf("Errore: inserisci un numero valido.\n");
+            while (getchar() != '\n');
+            continue;
+        }
+    } while ((scelta == 0 && stanza->stanza_sopra == NULL) || (scelta == 1 && stanza->stanza_sotto == NULL) || (scelta == 2 && stanza->stanza_sinistra == NULL) || (scelta == 3 && stanza->stanza_destra == NULL));
+    return scelta;
+}
+
+// Funzione per creare una stanza con valori casuali
+static Stanza *crea_stanza_random(){
+    Stanza *nuova_stanza = (Stanza *)malloc(sizeof(Stanza));
+    if (nuova_stanza == NULL) {
+        printf("Errore: impossibile allocare memoria per la nuova stanza.\n");
+        return NULL;
+    }
+
+    // Generazione casuale dei valori della stanza
+    nuova_stanza->tipo = rand() % 10;
+
+    int random_trabocchetto = rand() % 100;
+    if(random_trabocchetto <= 65){
+        nuova_stanza->trabocchetto = NESSUNO;
+    } else if (random_trabocchetto > 65 && random_trabocchetto <= 75){
+        nuova_stanza->trabocchetto = TEGOLA;
+    } else if (random_trabocchetto > 75 && random_trabocchetto <= 84){
+        nuova_stanza->trabocchetto = LAME;
+    } else if (random_trabocchetto > 84 && random_trabocchetto <= 92){
+        nuova_stanza->trabocchetto = CADUTA;
+    } else {
+        nuova_stanza->trabocchetto = BURRONE;
+    }
+
+    int random_tesoro = rand() % 100;
+    if(random_tesoro <= 20){
+        nuova_stanza->tesoro = NESSUN_TESORO;
+    } else if (random_tesoro > 20 && random_tesoro <= 40){
+        nuova_stanza->tesoro = VERDE_VELENO;
+    } else if (random_tesoro > 40 && random_tesoro <= 60){
+        nuova_stanza->tesoro = BLU_GUARIGIONE;
+    } else if (random_tesoro > 60 && random_tesoro <= 75){
+        nuova_stanza->tesoro = ROSSO_AUMENTA_VITA;
+    } else if (random_tesoro > 75 && random_tesoro <= 90){
+        nuova_stanza->tesoro = SPADA_TAGLIENTE;
+    } else {
+        nuova_stanza->tesoro = SCUDO;
+    }
+
+    nuova_stanza->stanza_destra = NULL;
+    nuova_stanza->stanza_sinistra = NULL;
+    nuova_stanza->stanza_sopra = NULL;
+    nuova_stanza->stanza_sotto = NULL;
+
+    //Inizializza a 0 il flag trabocchetto_attivato e tentativi_porta
+    nuova_stanza->trabocchetto_attivato = 0;
+    for(int i = 0; i < 4; i++){
+        nuova_stanza->tentativi_porta[i] = 0;
+    }
+
+    return nuova_stanza;
+}
+
+//Funzione per collegare due stanze
+static void collega_stanza(Stanza *stanza_precedente, Stanza *nuova_stanza){
+    int tentativi = 0;
+    while(tentativi < 100){
+                
+        int direzione = rand() % 4;
+        if(direzione == 0 && stanza_precedente->stanza_sopra == NULL){
+            stanza_precedente->stanza_sopra = nuova_stanza;
+            break;
+        } else if (direzione == 1 && stanza_precedente->stanza_sotto == NULL){
+            stanza_precedente->stanza_sotto = nuova_stanza;
+            break;
+        } else if (direzione == 2 && stanza_precedente->stanza_sinistra == NULL){
+            stanza_precedente->stanza_sinistra = nuova_stanza;
+            break;
+        } else if (direzione == 3 && stanza_precedente->stanza_destra == NULL){
+            stanza_precedente->stanza_destra = nuova_stanza;
+            break;
+        }
+        tentativi++;
+    }
+}
+
+//Funzione per contare le stanze
+static int conta_stanze(){
+    Stanza * current = primaStanza;
+    int count = 0;
+    while(current != NULL){
+        count++;
+        if(current->stanza_destra != NULL){
+            current = current->stanza_destra;
+        } else if (current->stanza_sotto != NULL){
+            current = current->stanza_sotto;
+        } else if (current->stanza_sinistra != NULL){
+            current = current->stanza_sinistra;
+        } else if (current->stanza_sopra != NULL){
+            current = current->stanza_sopra;
+        } else {
+            current = NULL;
+        }
+    }
+    return count;
+}
+
+//Funzione per mescolare un array
+static void mescola_array(int arr[], int n) {
+    for (int i = n - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        int temp = arr[i];
+        arr[i] = arr[j];
+        arr[j] = temp;
     }
 }
