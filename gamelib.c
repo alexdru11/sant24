@@ -259,7 +259,7 @@ static void genera_random() {
     libera_mappa();
 
     // Crea 15 stanze casuali
-     for (int i = 0; i < MAX_ROOMS; i++) {
+    for (int i = 0; i < MAX_ROOMS; i++) {
         Stanza *nuova_stanza = (Stanza *)malloc(sizeof(Stanza));
         if (nuova_stanza == NULL) {
             printf("Errore: impossibile allocare memoria per la nuova stanza.\n");
@@ -267,7 +267,7 @@ static void genera_random() {
         }
 
         // Generazione casuale dei valori della stanza
-         nuova_stanza->tipo = rand() % 10;
+        nuova_stanza->tipo = rand() % 10;
 
         int random_trabocchetto = rand() % 100;
         if(random_trabocchetto <= 65){
@@ -306,75 +306,47 @@ static void genera_random() {
         if (pFirst == NULL) {
             pFirst = nuova_stanza;
         } else {
-            
             Stanza *current = pFirst;
-            Stanza *previus=NULL;
-            //while (current->stanza_destra != NULL) {
-              //  current = current->stanza_destra;
-            //}
+            Stanza *previous = NULL;
 
-            //Avanza a caso nella mappa
-            int passi = rand() % (i + 1);
-            for(int j = 0; j < passi; j++){
+            // Trova l'ultima stanza
+            while (current != NULL) {
                 previous = current;
-                int direzione = rand() % 4;
-                switch (direzione)
-                {
-                case 0:if(current->stanza_sopra != NULL){
-                        current = current->stanza_sopra;
-                    }
-                    break;
-                case 1:
-                    if(current->stanza_sotto != NULL){
-                        current = current->stanza_sotto;
-                    }
-                    break;
-                case 2:
-                    if(current->stanza_sinistra != NULL){
-                        current = current->stanza_sinistra;
-                    }
-                    break;
-                
-                default:
-                    if(current->stanza_destra != NULL){
-                        current = current->stanza_destra;
-                    }
-                    break;
-                    }
-                
+                current = current->stanza_destra;
             }
-             // Collega la nuova stanza in modo casuale
-            int direzione = rand() % 4;
-            switch(direzione){
-                case 0:
-                    if(current->stanza_sopra == NULL){
-                        current->stanza_sopra = nuova_stanza;
-                    } else {
-                        current->stanza_destra = nuova_stanza;
-                    }
+            
+            //Adesso current e' null, previous e' l'ultima stanza
+            //Si prova ad attaccare la nuova stanza in una direzione a caso
+            int tentativi = 0;
+            while(tentativi < 100){
+                
+                int direzione = rand() % 4;
+                if(direzione == 0 && previous->stanza_sopra == NULL){
+                    previous->stanza_sopra = nuova_stanza;
+                    break;
+                } else if (direzione == 1 && previous->stanza_sotto == NULL){
+                    previous->stanza_sotto = nuova_stanza;
+                    break;
+                } else if (direzione == 2 && previous->stanza_sinistra == NULL){
+                    previous->stanza_sinistra = nuova_stanza;
+                    break;
+                } else if (direzione == 3 && previous->stanza_destra == NULL){
+                    previous->stanza_destra = nuova_stanza;
+                    break;
+                }
+                tentativi++;
+
+                //Se una direzione è libera, collega la nuova stanza e passa alla prossima iterazione
+                if(previous->stanza_sopra == nuova_stanza || previous->stanza_sotto == nuova_stanza || previous->stanza_sinistra == nuova_stanza || previous->stanza_destra == nuova_stanza){
+                    break;
+                }
+            }
+            
+            //Se non si riesce a collegare la stanza in nessun modo la si elimina
+            if(tentativi >= 100){
+                free(nuova_stanza);
+                printf("Impossibile collegare la stanza, verra eliminata.\n");
                 break;
-              case 1:
-                    if(current->stanza_sotto == NULL){
-                        current->stanza_sotto = nuova_stanza;
-                    } else {
-                        current->stanza_destra = nuova_stanza;
-                    }
-                break;
-                case 2:
-                    if(current->stanza_sinistra == NULL){
-                        current->stanza_sinistra = nuova_stanza;
-                    } else {
-                        current->stanza_destra = nuova_stanza;
-                    }
-                break;
-                case 3:
-                  if(current->stanza_destra == NULL){
-                        current->stanza_destra = nuova_stanza;
-                    } else {
-                        current->stanza_sinistra = nuova_stanza;
-                    }
-                break;
-          
             }
         }
     }
