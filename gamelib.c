@@ -279,10 +279,11 @@ static void genera_random() {
             primaStanza = nuova_stanza;
         } else {
             Stanza *current = primaStanza;
+            Stanza *precedente = NULL;
 
             // Trova una stanza a cui collegare la nuova stanza
             while (current != NULL) {
-                
+                precedente = current;
                 // Prova a collegare la stanza in una direzione casuale
                 if(current->stanza_sopra == NULL || current->stanza_sotto == NULL || current->stanza_sinistra == NULL || current->stanza_destra == NULL){
                     collega_stanza(current, nuova_stanza);
@@ -292,15 +293,33 @@ static void genera_random() {
                 if(current->stanza_sopra == nuova_stanza || current->stanza_sotto == nuova_stanza || current->stanza_sinistra == nuova_stanza || current->stanza_destra == nuova_stanza){
                     break;
                 } else {
-                    // Altrimenti, passa alla prossima stanza
-                    if(current->stanza_destra != NULL){
-                        current = current->stanza_destra;
-                    } else if (current->stanza_sotto != NULL){
-                        current = current->stanza_sotto;
-                    } else if (current->stanza_sopra != NULL){
-                        current = current->stanza_sopra;
-                    } else {
-                        current = current->stanza_sinistra;
+                    // Altrimenti, passa alla prossima stanza in modo casuale
+                    int direzione = rand() % 4;
+                    switch(direzione){
+                        case 0:
+                            if(current->stanza_sopra != NULL){
+                                current = current->stanza_sopra;
+                            }
+                        break;
+                        case 1:
+                            if(current->stanza_sotto != NULL){
+                                current = current->stanza_sotto;
+                            }
+                        break;
+                        case 2:
+                            if(current->stanza_sinistra != NULL){
+                                current = current->stanza_sinistra;
+                            }
+                        break;
+                        case 3:
+                            if(current->stanza_destra != NULL){
+                                current = current->stanza_destra;
+                            }
+                        break;
+                    }
+                    //Se non si riesce a passare in nessuna direzione, torna indietro
+                    if(current == precedente){
+                        current = primaStanza;
                     }
                 }
             }
