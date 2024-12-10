@@ -259,7 +259,7 @@ static void genera_random() {
     libera_mappa();
 
     // Crea 15 stanze casuali
-    for (int i = 0; i < MAX_ROOMS; i++) {
+     for (int i = 0; i < MAX_ROOMS; i++) {
         Stanza *nuova_stanza = (Stanza *)malloc(sizeof(Stanza));
         if (nuova_stanza == NULL) {
             printf("Errore: impossibile allocare memoria per la nuova stanza.\n");
@@ -267,8 +267,8 @@ static void genera_random() {
         }
 
         // Generazione casuale dei valori della stanza
-        nuova_stanza->tipo = rand() % 10;
-        
+         nuova_stanza->tipo = rand() % 10;
+
         int random_trabocchetto = rand() % 100;
         if(random_trabocchetto <= 65){
             nuova_stanza->trabocchetto = nessuno;
