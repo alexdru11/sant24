@@ -315,26 +315,32 @@ static void genera_random() {
                 current = current->stanza_destra;
             }
             
-            //Adesso current e' null, previous e' l'ultima stanza
+             //Adesso current e' null, previous e' l'ultima stanza
             //Si prova ad attaccare la nuova stanza in una direzione a caso
             int tentativi = 0;
+            int direzione_libera = 0; // Flag per indicare se almeno una direzione è libera
             while(tentativi < 100){
                 
                 int direzione = rand() % 4;
                 if(direzione == 0 && previous->stanza_sopra == NULL){
                     previous->stanza_sopra = nuova_stanza;
+                    direzione_libera = 1;
                     break;
                 } else if (direzione == 1 && previous->stanza_sotto == NULL){
                     previous->stanza_sotto = nuova_stanza;
+                    direzione_libera = 1;
                     break;
                 } else if (direzione == 2 && previous->stanza_sinistra == NULL){
                     previous->stanza_sinistra = nuova_stanza;
+                    direzione_libera = 1;
                     break;
                 } else if (direzione == 3 && previous->stanza_destra == NULL){
                     previous->stanza_destra = nuova_stanza;
+                    direzione_libera = 1;
                     break;
                 }
                 tentativi++;
+            }
 
                 //Se una direzione è libera, collega la nuova stanza e passa alla prossima iterazione
                 if(previous->stanza_sopra == nuova_stanza || previous->stanza_sotto == nuova_stanza || previous->stanza_sinistra == nuova_stanza || previous->stanza_destra == nuova_stanza){
@@ -342,8 +348,8 @@ static void genera_random() {
                 }
             }
             
-            //Se non si riesce a collegare la stanza in nessun modo la si elimina
-            if(tentativi >= 100){
+             //Se non si riesce a collegare la stanza in nessun modo la si elimina
+            if(direzione_libera == 0){
                 free(nuova_stanza);
                 printf("Impossibile collegare la stanza, verra eliminata.\n");
                 break;
