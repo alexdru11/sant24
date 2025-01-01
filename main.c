@@ -5,7 +5,7 @@
 
 int main() {
     // Inizializza il generatore di numeri casuali
-    srand((unsigned)time(NULL));
+    srand(time(NULL));
 
     int scelta;
 
@@ -15,8 +15,13 @@ int main() {
         printf("2 - Gioca\n");
         printf("3 - Termina gioco\n");
         printf("4 - Crediti\n");
-        printf("Scelta: ");
-        scanf("%d", &scelta);
+        printf(">> ");
+
+        if (scanf("%d", &scelta) != 1) {
+            printf("Errore: inserisci un numero valido.\n");
+            while (getchar() != '\n'); // Pulisce il buffer di input
+            continue;
+        }
 
         switch (scelta) {
             case 1:
